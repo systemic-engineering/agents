@@ -2,6 +2,12 @@
 # Copy to your project and trim to what's relevant.
 # Canonical source: systemic-engineer/agents/Justfile
 
+# ── Variables ────────────────────────────────────────────────────────────────
+
+GLUE_BIN     := env_var_or_default("GLUE_BIN",        x'~/.local/libexec/glue/bin/glue')
+GLUE_SESSION := env_var_or_default("GLUE_SESSION_ID", "session-unknown")
+GLUE_WORKER  := env_var_or_default("GLUE_WORKER_ID",  "worker-unknown")
+
 # List all commands
 default:
     @just --list
@@ -12,6 +18,14 @@ default:
 deps:
     mix deps.get
     mix2nix > deps.nix
+
+# Fetch deps without regenerating deps.nix
+deps-get:
+    mix deps.get
+
+# Compile the project
+compile:
+    mix compile
 
 # ── Quality ─────────────────────────────────────────────────────────────────
 
@@ -43,7 +57,60 @@ format:
 check:
     mix check
 
-# ── Hooks ───────────────────────────────────────────────────────────────────
+# ── Build / Release ──────────────────────────────────────────────────────────
+
+# Build production release (Elixir)
+release:
+    MIX_ENV=prod mix release --overwrite
+
+# ── Daemon ───────────────────────────────────────────────────────────────────
+
+# Start the glue daemon in the background
+daemon-start:
+    {{GLUE_BIN}} daemon
+
+# Stop the glue daemon
+daemon-stop:
+    {{GLUE_BIN}} stop
+
+# Stop, rebuild, and restart the daemon
+daemon-rebuild: release daemon-stop
+    sleep 2
+    {{GLUE_BIN}} daemon
+
+# ── Glue bus ─────────────────────────────────────────────────────────────────
+#
+# Usage (from within the nix devshell or with GLUE_BIN / GLUE_SESSION_ID / GLUE_WORKER_ID set):
+#
+#   just glue-status
+#   just glue-init  :supervisor
+#   just glue-chat  "message"
+#   just glue-dm    TARGET "message"
+#
+# Override session/worker inline:
+#   just glue-chat "message" session=my-session worker=my-worker
+
+# Check whether the glue daemon is reachable
+glue-status:
+    @{{GLUE_BIN}} rpc "IO.puts(node())" 2>/dev/null && echo "glue: up" || echo "glue: unreachable"
+
+# Announce worker presence (init event). ROLE: :worker | :supervisor | :observer
+glue-init role session=GLUE_SESSION worker=GLUE_WORKER:
+    @{{GLUE_BIN}} rpc "Glue.Dispatch.dispatch(Glue.Events.init(Glue.SessionId.new(\"{{session}}\"), Glue.WorkerId.new(\"{{worker}}\"), {{role}}, DateTime.utc_now()))" 2>/dev/null || true
+
+# Broadcast a chatter message to all bus members
+glue-chat msg session=GLUE_SESSION worker=GLUE_WORKER:
+    @{{GLUE_BIN}} rpc "Glue.Dispatch.dispatch(Glue.Events.chatter(Glue.SessionId.new(\"{{session}}\"), Glue.WorkerId.new(\"{{worker}}\"), Glue.Message.new(\"{{msg}}\"), DateTime.utc_now()))" 2>/dev/null || true
+
+# Send a direct message to a specific worker
+glue-dm target msg session=GLUE_SESSION worker=GLUE_WORKER:
+    @{{GLUE_BIN}} rpc "Glue.Dispatch.send_to(Glue.WorkerId.new(\"{{target}}\"), Glue.Events.dm(Glue.SessionId.new(\"{{session}}\"), Glue.WorkerId.new(\"{{worker}}\"), Glue.WorkerId.new(\"{{target}}\"), Glue.Message.new(\"{{msg}}\"), DateTime.utc_now()))" 2>/dev/null || true
+
+# Tail the glue event log (set GLUE_EVENT_LOG in env)
+glue-recv:
+    tail -f "${GLUE_EVENT_LOG:-/tmp/glue-events.log}"
+
+# ── Hooks ────────────────────────────────────────────────────────────────────
 
 # Pre-commit gate: called by commit-msg hook. Stash isolation handled by the hook.
 pre-commit: check
@@ -51,7 +118,7 @@ pre-commit: check
 # Pre-push gate: called by pre-push hook. Enforce 100% coverage.
 pre-push: coverage
 
-# ── Secrets ─────────────────────────────────────────────────────────────────
+# ── Secrets ──────────────────────────────────────────────────────────────────
 
 # Start IEx with secrets loaded
 iex:
