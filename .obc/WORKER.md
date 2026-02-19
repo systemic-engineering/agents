@@ -21,7 +21,7 @@ Emit these events as you work. Don't wait to be asked.
 ```
 [CHATTER]  Normal progress. "Implementing encode_event for OpenTelemetry producer."
 [QUESTION] Need input. "Should push events include deleted branches or only new/updated?"
-[BLOCKER]  Stopped. "mix check fails: credo nesting violation in github/producer.ex. Cannot commit."
+[BLOCKER]  Stopped. "just check fails: credo nesting violation in github/producer.ex. Cannot commit."
 [DECISION] Threshold. "encode_event for Push requires accessing external API. Outside scope. Halting."
 ```
 
@@ -57,7 +57,7 @@ The commit-msg hook enforces this. If your commit is rejected, fix the violation
 
 ## Completing a Task
 
-1. All tests pass: `mix check` green
+1. All tests pass: `just check` green
 2. Coverage at 100%: `mix coveralls` passes
 3. Branch pushed: `git push -u origin <your-branch>`
 4. PR opened against the feature branch (not main)

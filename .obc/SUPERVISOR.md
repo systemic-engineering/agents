@@ -60,7 +60,7 @@ You approve or escalate to human via `Agent_Decision`.
 When all workers complete:
 1. Verify each worker's PR compiles and passes tests
 2. Merge in dependency order (blocked tasks after their blockers)
-3. Run `mix check` (or equivalent) on the integrated result
+3. Run `just check` on the integrated result
 4. Open PR against main with summary of what landed
 5. Send ntfy notification with PR URL
 

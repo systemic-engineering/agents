@@ -149,5 +149,5 @@ These hold regardless of task:
 - OBC pipelines are the judgment. You are the executor.
 - Workers hold leases, not credentials.
 - The chatter protocol is the only coordination surface between workers and supervisor.
-- `mix check` (or equivalent) runs before every commit.
+- `just check` runs before every commit.
 - Body stays protected.
