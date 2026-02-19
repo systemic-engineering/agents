@@ -38,6 +38,38 @@
           export LANG=en_US.UTF-8
         '';
 
+        # Worktree guard — enforces branch isolation for worker invocations.
+        #
+        # Detects context from git state — no env vars required from the supervisor.
+        #
+        # In a non-main worktree (worker context):
+        #   - Branch must be named (not detached HEAD)
+        #   - Branch must not be main/master (workers can't operate directly on main)
+        #   - AGENT_BRANCH is exported (agent context, not glue infrastructure)
+        #   - GLUE_CHANNEL defaults to the branch name (scopes all glue events to branch)
+        #
+        # In the main worktree — no enforcement (safe for ad-hoc human use).
+        worktreeShellHook = ''
+          # ── Worktree guard ────────────────────────────────────────────────────
+          _wt_main=$(git worktree list 2>/dev/null | head -1 | awk '{print $1}')
+          if [ "$(pwd)" != "''${_wt_main}" ]; then
+            _wt_branch=$(git branch --show-current 2>/dev/null)
+            if [ -z "''${_wt_branch}" ]; then
+              echo "❌ worktree guard: detached HEAD — workers must be on a named branch"
+              exit 1
+            fi
+            if [ "''${_wt_branch}" = "main" ] || [ "''${_wt_branch}" = "master" ]; then
+              echo "❌ worktree guard: workers must use a feature branch, not ''${_wt_branch}"
+              echo "   Create a worktree: just spawn-worktree <branch>"
+              exit 1
+            fi
+            export AGENT_BRANCH="''${_wt_branch}"
+            export GLUE_CHANNEL="''${GLUE_CHANNEL:-''${_wt_branch}}"
+            echo "✓ worktree: ''${_wt_branch} ($(pwd))"
+          fi
+          # ──────────────────────────────────────────────────────────────────────
+        '';
+
         # Glue sidecar script — bundled in the nix store so it's always findable
         glueSidecar = pkgs.writeText "glue-sidecar.exs"
           (builtins.readFile ./glue/sidecar.exs);
@@ -98,12 +130,12 @@
           # ────────────────────────────────────────────────────────────────────
         '';
 
-        elixirShellHook = baseShellHook + ''
+        elixirMixHook = ''
           export MIX_HOME=$PWD/.nix-mix
           export MIX_REBAR3=${beamPkgs.rebar3}/bin/rebar3
           export HEX_HOME=$PWD/.nix-hex
           export PATH=$MIX_HOME/bin:$HEX_HOME/bin:$PATH
-        '' + glueShellHook;
+        '';
 
       in {
         devShells = {
@@ -114,12 +146,12 @@
           #   nix develop github:systemic-engineer/agents#base
           default = pkgs.mkShell {
             buildInputs = baseTools;
-            shellHook   = baseShellHook;
+            shellHook   = baseShellHook + worktreeShellHook + glueShellHook;
           };
 
           base = pkgs.mkShell {
             buildInputs = baseTools;
-            shellHook   = baseShellHook;
+            shellHook   = baseShellHook + worktreeShellHook + glueShellHook;
           };
 
           # ── elixir ───────────────────────────────────────────────────────────
@@ -129,7 +161,7 @@
           #   nix develop github:systemic-engineer/agents#elixir
           elixir = pkgs.mkShell {
             buildInputs = baseTools ++ elixirTools;
-            shellHook   = elixirShellHook;
+            shellHook   = baseShellHook + elixirMixHook + worktreeShellHook + glueShellHook;
           };
         };
       });

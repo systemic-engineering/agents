@@ -250,6 +250,53 @@ If the daemon isn't running, `glue connect/join/leave` are silent no-ops.
 
 ---
 
+## Worktree Isolation
+
+Every worker operates in a dedicated git worktree on a feature branch. The supervisor
+creates the worktree; the nix devShell enforces the constraint.
+
+### Supervisor: spawning a worker
+
+```sh
+# Create worktree + branch, capture the path
+worktree=$(just spawn-worktree feature/auth)
+
+# Hand the path to the worker invocation (however you spawn it)
+# The worker cds into the path and runs nix develop — enforcement is automatic
+```
+
+The `spawn-worktree` recipe:
+- Derives the worktree path from the branch name (`repo-auth` beside `repo`)
+- Is idempotent — safe to call if the worktree already exists
+- Creates the branch if it doesn't exist, attaches to it if it does
+
+### Worker: what the devShell does automatically
+
+When `nix develop github:systemic-engineering/agents` (or `#elixir`) runs inside a non-main
+worktree, the shellHook:
+
+1. Reads the current branch from git — no env vars required
+2. Rejects detached HEAD and `main`/`master` (workers can't operate directly on those)
+3. Exports `AGENT_BRANCH=<branch>` — the agent's git context
+4. Sets `GLUE_CHANNEL` to the branch name if not already configured — scopes all glue
+   events to this branch automatically
+
+In the main worktree (ad-hoc human use) — no enforcement, no changes.
+
+### Supervisor: cleanup after merge
+
+```sh
+just remove-worktree feature/auth
+```
+
+### Why worktrees, not branches alone
+
+Multiple workers can operate concurrently on the same repo without file-level conflicts.
+Each worktree is a separate filesystem path — workers can't step on each other's uncommitted
+changes. The branch is the coordination unit; the worktree is the isolation mechanism.
+
+---
+
 ## What You Should Not Do
 
 - Write to `visibility/private/` — ever. Explicit consent required.
