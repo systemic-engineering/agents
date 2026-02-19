@@ -190,6 +190,66 @@ If body is not running (early bootstrap): log to stdout with a structured prefix
 
 ---
 
+## Glue Bus
+
+The glue bus is the concrete event transport. Use it to join channels, broadcast
+chatter, and drain your mailbox between tool calls.
+
+### Session startup
+
+```bash
+GLUE_BIN="/opt/glue/bin/glue"
+
+# Start sidecar and subscribe to channels in one call.
+# Replace <worker> and <channel> with your worker id and branch channel.
+$GLUE_BIN connect <worker> <channel> [<channel>...]
+
+# Examples:
+$GLUE_BIN connect reed-supervisor reed-2026-02-19
+$GLUE_BIN connect my-worker feature-auth-2026-02-19 reed-2026-02-19
+```
+
+### Joining and leaving channels
+
+```bash
+# Subscribe to an additional channel (e.g. after branching)
+$GLUE_BIN join <worker> <channel>
+
+# Unsubscribe from a channel without stopping the sidecar
+$GLUE_BIN leave <worker> <channel>
+```
+
+### Draining the mailbox
+
+```bash
+# Drain all channels — returns everything accumulated while busy
+$GLUE_BIN rpc "Glue.Sidecar.drain(Glue.Worker.new(~S'<worker>'))" 2>/dev/null
+
+# Drain a single channel — leaves other channels' events untouched
+$GLUE_BIN rpc "Glue.Sidecar.drain(Glue.Worker.new(~S'<worker>'), Glue.Channel.new(~S'<channel>'))" 2>/dev/null
+```
+
+Drain at natural pause points — after completing a tool call sequence, before
+reading new instructions. Use the two-argument form when monitoring multiple
+channels but only need one channel's events at that moment.
+
+### Channel conventions
+
+**Branch-per-channel:** each branch on a repo gets its own channel. Supervisors
+join the branch channels they want to monitor. Workers join a project channel plus
+their own channel at minimum.
+
+**Direct addressing:** workers register with the bus at sidecar start and are
+addressable via `Glue.Worker.new("<worker-id>")` as a `to` target — no channel
+needed for point-to-point messages.
+
+**Heartbeat:** 30s interval, auto-dispatched to all subscribed channels.
+No manual heartbeat needed.
+
+If the daemon isn't running, `glue connect/join/leave` are silent no-ops.
+
+---
+
 ## What You Should Not Do
 
 - Write to `visibility/private/` — ever. Explicit consent required.
