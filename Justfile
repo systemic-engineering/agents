@@ -124,6 +124,44 @@ pre-push: coverage
 iex:
     sops exec-env secrets.sops.yaml 'iex -S mix'
 
+# ── Worktrees ────────────────────────────────────────────────────────────────
+
+# Supervisor: create a dedicated worktree for a worker branch.
+# Prints the worktree path on success — capture it to hand to the worker.
+# Usage: just spawn-worktree feature/auth
+#        just spawn-worktree feature/auth some-other-base
+spawn-worktree branch base="main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo=$(git rev-parse --show-toplevel)
+    name=$(echo "{{branch}}" | sed 's|[^a-zA-Z0-9]|-|g')
+    path="$(dirname "$repo")/$(basename "$repo")-${name}"
+    existing=$(git worktree list | awk -v b="[{{branch}}]" '$3 == b {print $1}')
+    if [ -n "$existing" ]; then
+      echo "worktree already exists: $existing" >&2
+      echo "$existing"
+      exit 0
+    fi
+    if git branch --list "{{branch}}" | grep -q .; then
+      git worktree add "$path" "{{branch}}"
+    else
+      git worktree add -b "{{branch}}" "$path" "{{base}}"
+    fi
+    echo "$path"
+
+# Supervisor: remove a worker worktree after the branch is merged.
+# Usage: just remove-worktree feature/auth
+remove-worktree branch:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    path=$(git worktree list | awk -v b="[{{branch}}]" '$3 == b {print $1}')
+    if [ -z "$path" ]; then
+      echo "no worktree found for branch {{branch}}" >&2
+      exit 1
+    fi
+    git worktree remove "$path"
+    echo "✓ removed: $path"
+
 # ── Hooks installation ───────────────────────────────────────────────────────
 
 # Install canonical hooks from systemic-engineer/agents

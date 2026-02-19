@@ -38,6 +38,50 @@
           export LANG=en_US.UTF-8
         '';
 
+        # Worktree guard — enforces branch isolation for worker invocations.
+        #
+        # Detects context from git state — no env vars required from the supervisor.
+        #
+        # In a non-main worktree (worker context):
+        #   - Branch must be named (not detached HEAD)
+        #   - Branch must not be main/master (workers can't operate directly on main)
+        #   - AGENT_BRANCH is exported (agent context, not glue infrastructure)
+        #   - GLUE_CHANNEL defaults to the branch name (scopes all glue events to branch)
+        #
+        # In the main worktree — no enforcement (safe for ad-hoc human use).
+        worktreeShellHook = ''
+          # ── Worktree guard ────────────────────────────────────────────────────
+          # Wrapped in a function so `return 1` exits the function only —
+          # the outer `|| exit 1` then exits the devshell cleanly without
+          # risk of accidentally killing a parent shell if sourced differently.
+          #
+          # Uses `pwd -P` on both sides to resolve symlinks before comparing,
+          # so macOS /tmp → /private/tmp style paths don't cause false mismatches.
+          _worktree_guard() {
+            _wt_main=$(git worktree list 2>/dev/null | head -1 | awk '{print $1}')
+            _wt_real=$(pwd -P 2>/dev/null)
+            _wt_main_real=$(cd "''${_wt_main}" 2>/dev/null && pwd -P)
+            if [ "''${_wt_real}" != "''${_wt_main_real}" ]; then
+              _wt_branch=$(git branch --show-current 2>/dev/null)
+              if [ -z "''${_wt_branch}" ]; then
+                echo "❌ worktree guard: detached HEAD — workers must be on a named branch"
+                return 1
+              fi
+              if [ "''${_wt_branch}" = "main" ] || [ "''${_wt_branch}" = "master" ]; then
+                echo "❌ worktree guard: workers must use a feature branch, not ''${_wt_branch}"
+                echo "   Create a worktree: just spawn-worktree <branch>"
+                return 1
+              fi
+              export AGENT_BRANCH="''${_wt_branch}"
+              export GLUE_CHANNEL="''${GLUE_CHANNEL:-''${_wt_branch}}"
+              echo "✓ worktree: ''${_wt_branch} ($(pwd))"
+            fi
+          }
+          _worktree_guard || exit 1
+          unset -f _worktree_guard
+          # ──────────────────────────────────────────────────────────────────────
+        '';
+
         # Glue sidecar script — bundled in the nix store so it's always findable
         glueSidecar = pkgs.writeText "glue-sidecar.exs"
           (builtins.readFile ./glue/sidecar.exs);
@@ -45,13 +89,14 @@
         glueShellHook = ''
           # ── Glue sidecar ────────────────────────────────────────────────────
           export GLUE_NODE="''${GLUE_NODE:-glue@Alexs-MacBook-Pro}"
-          # Installed release takes precedence; fall back to dev build
+          # Installed release takes precedence; fall back to dev build.
+          # Dev path uses $HOME so this works on any machine.
           if [ -f "''${HOME}/.local/libexec/glue/bin/glue" ]; then
             export GLUE_BIN="''${HOME}/.local/libexec/glue/bin/glue"
             export GLUE_COOKIE="$(cat ''${HOME}/.local/libexec/glue/releases/COOKIE 2>/dev/null || echo glue_local)"
-          elif [ -f "/Users/alexwolf/dev/projects/glue/_build/prod/rel/glue/bin/glue" ]; then
-            export GLUE_BIN="/Users/alexwolf/dev/projects/glue/_build/prod/rel/glue/bin/glue"
-            export GLUE_COOKIE="$(cat /Users/alexwolf/dev/projects/glue/_build/prod/rel/glue/releases/COOKIE 2>/dev/null || echo glue_local)"
+          elif [ -f "''${HOME}/dev/projects/glue/_build/prod/rel/glue/bin/glue" ]; then
+            export GLUE_BIN="''${HOME}/dev/projects/glue/_build/prod/rel/glue/bin/glue"
+            export GLUE_COOKIE="$(cat ''${HOME}/dev/projects/glue/_build/prod/rel/glue/releases/COOKIE 2>/dev/null || echo glue_local)"
           else
             export GLUE_BIN=""
             export GLUE_COOKIE="glue_local"
@@ -76,8 +121,10 @@
           }
           export -f glue-recv glue-status glue-chatter glue-dm
 
-          # Start sidecar in background if glue binary is available
-          if [ -n "$GLUE_BIN" ] && [ -f "$GLUE_BIN" ]; then
+          # Start sidecar in background if glue binary is available AND elixir is on PATH.
+          # The elixir check ensures base/default devShells (no OTP in buildInputs) skip
+          # the sidecar gracefully rather than failing silently.
+          if [ -n "$GLUE_BIN" ] && [ -f "$GLUE_BIN" ] && command -v elixir >/dev/null 2>&1; then
             GLUE_NODE="$GLUE_NODE" \
             GLUE_COOKIE="$GLUE_COOKIE" \
             GLUE_WORKER="$GLUE_WORKER" \
@@ -98,12 +145,12 @@
           # ────────────────────────────────────────────────────────────────────
         '';
 
-        elixirShellHook = baseShellHook + ''
+        elixirMixHook = ''
           export MIX_HOME=$PWD/.nix-mix
           export MIX_REBAR3=${beamPkgs.rebar3}/bin/rebar3
           export HEX_HOME=$PWD/.nix-hex
           export PATH=$MIX_HOME/bin:$HEX_HOME/bin:$PATH
-        '' + glueShellHook;
+        '';
 
       in {
         devShells = {
@@ -114,12 +161,12 @@
           #   nix develop github:systemic-engineer/agents#base
           default = pkgs.mkShell {
             buildInputs = baseTools;
-            shellHook   = baseShellHook;
+            shellHook   = baseShellHook + worktreeShellHook + glueShellHook;
           };
 
           base = pkgs.mkShell {
             buildInputs = baseTools;
-            shellHook   = baseShellHook;
+            shellHook   = baseShellHook + worktreeShellHook + glueShellHook;
           };
 
           # ── elixir ───────────────────────────────────────────────────────────
@@ -129,7 +176,7 @@
           #   nix develop github:systemic-engineer/agents#elixir
           elixir = pkgs.mkShell {
             buildInputs = baseTools ++ elixirTools;
-            shellHook   = elixirShellHook;
+            shellHook   = baseShellHook + elixirMixHook + worktreeShellHook + glueShellHook;
           };
         };
       });
