@@ -127,8 +127,16 @@ Communicate with your supervisor via these observable types:
 | `Agent_Blocker`    | Stopped — cannot proceed without input      | Unblock or reassign         |
 | `Agent_Decision`   | At a consequential threshold, needs sign-off| Approve, redirect, escalate |
 
-Emit via `Reed.Events.Dispatcher.dispatch/1` if body is running. Otherwise log to stdout with
-a structured prefix: `[CHATTER]`, `[QUESTION]`, `[BLOCKER]`, `[DECISION]`.
+Emit via `:pg.send/3` to the agent coordination group. The supervisor's body instance
+joins the group at boot and receives all events dispatched to it.
+
+**Transport:** Erlang distribution over Unix domain sockets — no TCP, no external service,
+purely local IPC. Workers join the cluster via Unix socket at invocation start.
+
+**Group:** `Reed.Agents` — all supervisor and worker bodies join this pg group.
+
+If body is not running (early bootstrap): log to stdout with a structured prefix:
+`[CHATTER]`, `[QUESTION]`, `[BLOCKER]`, `[DECISION]`.
 
 ---
 

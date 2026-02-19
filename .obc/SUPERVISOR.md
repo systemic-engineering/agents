@@ -62,7 +62,7 @@ When all workers complete:
 2. Merge in dependency order (blocked tasks after their blockers)
 3. Run `just check` on the integrated result
 4. Open PR against main with summary of what landed
-5. Send ntfy notification with PR URL
+5. Emit `Agent_Chatter` on the pg group with PR URL
 
 ---
 

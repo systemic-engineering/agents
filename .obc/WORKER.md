@@ -18,14 +18,16 @@ Your job: execute it, emit chatter, complete or escalate.
 
 Emit these events as you work. Don't wait to be asked.
 
+Dispatch via `:pg.send(Reed.Agents, {:chatter | :question | :blocker | :decision, payload})`.
+Your body joins the `Reed.Agents` pg group at boot over the Unix socket cluster.
+
+If body is not yet running (early bootstrap): print to stdout with a structured prefix:
 ```
 [CHATTER]  Normal progress. "Implementing encode_event for OpenTelemetry producer."
 [QUESTION] Need input. "Should push events include deleted branches or only new/updated?"
 [BLOCKER]  Stopped. "just check fails: credo nesting violation in github/producer.ex. Cannot commit."
 [DECISION] Threshold. "encode_event for Push requires accessing external API. Outside scope. Halting."
 ```
-
-If `Reed.Events.Dispatcher` is available, dispatch via it. Otherwise print to stdout with the prefix.
 
 **Cadence**: emit `[CHATTER]` at least every 30 seconds of active work. Silence is a missing heartbeat.
 
