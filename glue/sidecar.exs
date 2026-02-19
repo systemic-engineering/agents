@@ -6,14 +6,14 @@
 # Required env:
 #   GLUE_NODE        — glue daemon node   (e.g. "glue@Alexs-MacBook-Pro")
 #   GLUE_COOKIE      — Erlang cookie
-#   GLUE_WORKER_ID   — this agent's worker id
-#   GLUE_SESSION_ID  — this agent's session id
+#   GLUE_WORKER      — this agent's worker id
+#   GLUE_CHANNEL     — this agent's channel id
 #   GLUE_EVENT_LOG   — path to append received events
 
 glue_node = System.get_env("GLUE_NODE", "glue@Alexs-MacBook-Pro") |> String.to_atom()
 event_log  = System.get_env("GLUE_EVENT_LOG", "/tmp/glue-events-#{:os.getpid()}.log")
-worker_id  = System.get_env("GLUE_WORKER_ID", "agent-#{:os.getpid()}")
-session_id = System.get_env("GLUE_SESSION_ID", "session-#{:os.getpid()}")
+worker  = System.get_env("GLUE_WORKER", "agent-#{:os.getpid()}")
+channel = System.get_env("GLUE_CHANNEL", "channel-#{:os.getpid()}")
 
 log = fn entry ->
   ts   = DateTime.utc_now() |> DateTime.to_iso8601()
@@ -21,7 +21,7 @@ log = fn entry ->
   File.write!(event_log, line, [:append])
 end
 
-IO.puts("[glue sidecar] starting — worker=#{worker_id} session=#{session_id}")
+IO.puts("[glue sidecar] starting — worker=#{worker} channel=#{channel}")
 
 case Node.connect(glue_node) do
   true    -> IO.puts("[glue sidecar] connected to #{glue_node}")

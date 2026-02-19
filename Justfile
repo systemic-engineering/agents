@@ -5,8 +5,8 @@
 # ── Variables ────────────────────────────────────────────────────────────────
 
 GLUE_BIN     := env_var_or_default("GLUE_BIN",        x'~/.local/libexec/glue/bin/glue')
-GLUE_SESSION := env_var_or_default("GLUE_SESSION_ID", "session-unknown")
-GLUE_WORKER  := env_var_or_default("GLUE_WORKER_ID",  "worker-unknown")
+GLUE_CHANNEL := env_var_or_default("GLUE_CHANNEL", "channel-unknown")
+GLUE_WORKER  := env_var_or_default("GLUE_WORKER",  "worker-unknown")
 
 # List all commands
 default:
@@ -80,7 +80,7 @@ daemon-rebuild: release daemon-stop
 
 # ── Glue bus ─────────────────────────────────────────────────────────────────
 #
-# Usage (from within the nix devshell or with GLUE_BIN / GLUE_SESSION_ID / GLUE_WORKER_ID set):
+# Usage (from within the nix devshell or with GLUE_BIN / GLUE_CHANNEL / GLUE_WORKER set):
 #
 #   just glue-status
 #   just glue-init  :supervisor
@@ -88,23 +88,23 @@ daemon-rebuild: release daemon-stop
 #   just glue-dm    TARGET "message"
 #
 # Override session/worker inline:
-#   just glue-chat "message" session=my-session worker=my-worker
+#   just glue-chat "message" channel=my-channel worker=my-worker
 
 # Check whether the glue daemon is reachable
 glue-status:
     @{{GLUE_BIN}} rpc "IO.puts(node())" 2>/dev/null && echo "glue: up" || echo "glue: unreachable"
 
 # Announce worker presence (init event). ROLE: :worker | :supervisor | :observer
-glue-init role session=GLUE_SESSION worker=GLUE_WORKER:
-    @{{GLUE_BIN}} rpc "Glue.Dispatch.dispatch(Glue.Events.init(Glue.SessionId.new(\"{{session}}\"), Glue.WorkerId.new(\"{{worker}}\"), {{role}}, DateTime.utc_now()))" 2>/dev/null || true
+glue-init role channel=GLUE_CHANNEL worker=GLUE_WORKER:
+    @{{GLUE_BIN}} rpc "Glue.Dispatch.dispatch(Glue.Events.init(Glue.Channel.new(\"{{session}}\"), Glue.Worker.new(\"{{worker}}\"), {{role}}, DateTime.utc_now()))" 2>/dev/null || true
 
 # Broadcast a chatter message to all bus members
-glue-chat msg session=GLUE_SESSION worker=GLUE_WORKER:
-    @{{GLUE_BIN}} rpc "Glue.Dispatch.dispatch(Glue.Events.chatter(Glue.SessionId.new(\"{{session}}\"), Glue.WorkerId.new(\"{{worker}}\"), Glue.Message.new(\"{{msg}}\"), DateTime.utc_now()))" 2>/dev/null || true
+glue-chat msg channel=GLUE_CHANNEL worker=GLUE_WORKER:
+    @{{GLUE_BIN}} rpc "Glue.Dispatch.dispatch(Glue.Events.chatter(Glue.Channel.new(\"{{session}}\"), Glue.Worker.new(\"{{worker}}\"), Glue.Message.new(\"{{msg}}\"), DateTime.utc_now()))" 2>/dev/null || true
 
 # Send a direct message to a specific worker
-glue-dm target msg session=GLUE_SESSION worker=GLUE_WORKER:
-    @{{GLUE_BIN}} rpc "Glue.Dispatch.send_to(Glue.WorkerId.new(\"{{target}}\"), Glue.Events.dm(Glue.SessionId.new(\"{{session}}\"), Glue.WorkerId.new(\"{{worker}}\"), Glue.WorkerId.new(\"{{target}}\"), Glue.Message.new(\"{{msg}}\"), DateTime.utc_now()))" 2>/dev/null || true
+glue-dm target msg channel=GLUE_CHANNEL worker=GLUE_WORKER:
+    @{{GLUE_BIN}} rpc "Glue.Dispatch.send_to(Glue.Worker.new(\"{{target}}\"), Glue.Events.dm(Glue.Channel.new(\"{{session}}\"), Glue.Worker.new(\"{{worker}}\"), Glue.Worker.new(\"{{target}}\"), Glue.Message.new(\"{{msg}}\"), DateTime.utc_now()))" 2>/dev/null || true
 
 # Tail the glue event log (set GLUE_EVENT_LOG in env)
 glue-recv:

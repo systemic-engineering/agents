@@ -56,8 +56,8 @@
             export GLUE_BIN=""
             export GLUE_COOKIE="glue_local"
           fi
-          export GLUE_WORKER_ID="''${GLUE_WORKER_ID:-agent-$$}"
-          export GLUE_SESSION_ID="''${GLUE_SESSION_ID:-session-$$}"
+          export GLUE_WORKER="''${GLUE_WORKER:-agent-$$}"
+          export GLUE_CHANNEL="''${GLUE_CHANNEL:-session-$$}"
           export GLUE_EVENT_LOG="/tmp/glue-events-$$.log"
 
           # Shell functions — exported so subshells inherit them
@@ -68,11 +68,11 @@
           }
           glue-chatter() {
             local msg="$1"
-            "$GLUE_BIN" rpc "Glue.Dispatch.dispatch(Glue.Events.chatter(Glue.SessionId.new(\"$GLUE_SESSION_ID\"), Glue.WorkerId.new(\"$GLUE_WORKER_ID\"), Glue.Message.new(\"$msg\"), DateTime.utc_now()))"
+            "$GLUE_BIN" rpc "Glue.Dispatch.dispatch(Glue.Events.chatter(Glue.Channel.new(\"$GLUE_CHANNEL\"), Glue.Worker.new(\"$GLUE_WORKER\"), Glue.Message.new(\"$msg\"), DateTime.utc_now()))"
           }
           glue-dm() {
             local target="$1" msg="$2"
-            "$GLUE_BIN" rpc "Glue.Dispatch.send_to(Glue.WorkerId.new(\"$target\"), Glue.Events.dm(Glue.SessionId.new(\"$GLUE_SESSION_ID\"), Glue.WorkerId.new(\"$GLUE_WORKER_ID\"), Glue.WorkerId.new(\"$target\"), Glue.Message.new(\"$msg\"), DateTime.utc_now()))"
+            "$GLUE_BIN" rpc "Glue.Dispatch.send_to(Glue.Worker.new(\"$target\"), Glue.Events.dm(Glue.Channel.new(\"$GLUE_CHANNEL\"), Glue.Worker.new(\"$GLUE_WORKER\"), Glue.Worker.new(\"$target\"), Glue.Message.new(\"$msg\"), DateTime.utc_now()))"
           }
           export -f glue-recv glue-status glue-chatter glue-dm
 
@@ -80,13 +80,13 @@
           if [ -n "$GLUE_BIN" ] && [ -f "$GLUE_BIN" ]; then
             GLUE_NODE="$GLUE_NODE" \
             GLUE_COOKIE="$GLUE_COOKIE" \
-            GLUE_WORKER_ID="$GLUE_WORKER_ID" \
-            GLUE_SESSION_ID="$GLUE_SESSION_ID" \
+            GLUE_WORKER="$GLUE_WORKER" \
+            GLUE_CHANNEL="$GLUE_CHANNEL" \
             GLUE_EVENT_LOG="$GLUE_EVENT_LOG" \
             elixir --sname "glue-sidecar-$$" --cookie "$GLUE_COOKIE" ${glueSidecar} \
               2>/tmp/glue-sidecar-$$.log &
             _GLUE_SIDECAR_PID=$!
-            echo "glue: sidecar started (pid $_GLUE_SIDECAR_PID, worker=$GLUE_WORKER_ID)"
+            echo "glue: sidecar started (pid $_GLUE_SIDECAR_PID, worker=$GLUE_WORKER)"
           else
             echo "glue: daemon not installed — sidecar skipped (install with: just install in glue repo)"
           fi

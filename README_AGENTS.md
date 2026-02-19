@@ -144,7 +144,7 @@ Communicate with your supervisor via these observable types:
 
 ```elixir
 Agent_Exit(
-  session_id :: String.t(),
+  channel :: String.t(),
   reason     :: :normal | :error | :killed | :timeout,
   summary    :: String.t()
 )
@@ -164,7 +164,7 @@ preceding it) is treated as `:killed`.
 
 ```elixir
 Agent_Reschedule(
-  session_id :: String.t(),
+  channel :: String.t(),
   next_run   :: DateTime.t() | :immediate,
   state      :: map()
 )

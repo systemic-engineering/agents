@@ -30,7 +30,7 @@ and passes it to the next invocation when the schedule fires. Your next self sta
 
 ```elixir
 Agent_Reschedule(
-  session_id: session_id,
+  channel: channel,
   next_run: :immediate | ~U[2026-02-20 03:00:00Z],
   state: %{
     last_seen_sha: "abc123",
